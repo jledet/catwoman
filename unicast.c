@@ -29,6 +29,8 @@
 #include "translation-table.h"
 #include "routing.h"
 #include "hard-interface.h"
+#include "coding.h"
+#include "decoding.h"
 
 
 static struct sk_buff *frag_merge_packet(struct list_head *head,
@@ -339,6 +341,8 @@ find_router:
 		goto out;
 	}
 
+	unicast_packet->decoding_id = get_decoding_id(bat_priv);
+	stats_update(bat_priv, STAT_XMIT);
 	send_skb_packet(skb, neigh_node->if_incoming, neigh_node->addr);
 	ret = 0;
 	goto out;

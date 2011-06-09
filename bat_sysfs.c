@@ -27,6 +27,7 @@
 #include "gateway_common.h"
 #include "gateway_client.h"
 #include "vis.h"
+#include "decoding.h"
 
 static struct net_device *kobj_to_netdev(struct kobject *obj)
 {
@@ -378,6 +379,10 @@ static BAT_ATTR(gw_bandwidth, S_IRUGO | S_IWUSR, show_gw_bwidth,
 BAT_ATTR_UINT(log_level, S_IRUGO | S_IWUSR, 0, 7, NULL);
 #endif
 
+BAT_ATTR_BOOL(catwoman, S_IRUGO | S_IWUSR, update_promisc);
+BAT_ATTR_UINT(catwoman_hold, S_IRUGO | S_IWUSR, 0, 10000, NULL);
+BAT_ATTR_UINT(catwoman_purge, S_IRUGO | S_IWUSR, 0, 10000, NULL);
+
 static struct bat_attribute *mesh_attrs[] = {
 	&bat_attr_aggregated_ogms,
 	&bat_attr_bonding,
@@ -388,6 +393,9 @@ static struct bat_attribute *mesh_attrs[] = {
 	&bat_attr_hop_penalty,
 	&bat_attr_gw_sel_class,
 	&bat_attr_gw_bandwidth,
+	&bat_attr_catwoman,
+	&bat_attr_catwoman_hold,
+	&bat_attr_catwoman_purge,
 #ifdef CONFIG_BATMAN_ADV_DEBUG
 	&bat_attr_log_level,
 #endif

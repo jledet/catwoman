@@ -34,6 +34,8 @@
 #include "gateway_common.h"
 #include "gateway_client.h"
 #include "unicast.h"
+#include "coding.h"
+#include "decoding.h"
 
 void slide_own_bcast_window(struct hard_iface *hard_iface)
 {
@@ -791,6 +793,18 @@ void receive_bat_packet(const struct ethhdr *ethhdr,
 	if (!orig_neigh_node)
 		goto out;
 
+	/* if this OGM seqno equals last orig_node's seqno, OGM ttl
+	 * is only decremented by one, we add a coding possibility
+	 * and originator is our neighbor */
+	if (atomic_read(&bat_priv->catwoman))
+		if (is_coding_neighbor(orig_node, batman_packet))
+			coding_orig_neighbor(bat_priv, orig_node,
+					orig_neigh_node, batman_packet);
+
+	/* Add orig as coding node to itself */
+	if (atomic_read(&bat_priv->catwoman) && is_single_hop_neigh)
+		coding_orig_neighbor(bat_priv, orig_node, orig_node, batman_packet);
+
 	orig_neigh_router = orig_node_get_router(orig_neigh_node);
 
 	/* drop packet if sender is not a direct neighbor and if we
@@ -1478,8 +1492,16 @@ int route_unicast_packet(struct sk_buff *skb, struct hard_iface *recv_if)
 	/* decrement ttl */
 	unicast_packet->ttl--;
 
-	/* route it */
-	send_skb_packet(skb, neigh_node->if_incoming, neigh_node->addr);
+	/* Code packet if possible */
+	if (atomic_read(&bat_priv->catwoman) && 
+			!((struct bat_skb_cb *)skb->cb)->decoded) {
+		add_coding_skb(skb, neigh_node, ethhdr);
+	} else {
+		stats_update(bat_priv, STAT_FORWARD);
+		send_skb_packet(skb, neigh_node->if_incoming, 
+				neigh_node->addr);
+	}
+
 	ret = NET_RX_SUCCESS;
 
 out:
@@ -1558,12 +1580,19 @@ static int check_unicast_ttvn(struct bat_priv *bat_priv,
 
 int recv_unicast_packet(struct sk_buff *skb, struct hard_iface *recv_if)
 {
+	struct ethhdr *ethhdr = (struct ethhdr *)skb_mac_header(skb);
 	struct bat_priv *bat_priv = netdev_priv(recv_if->soft_iface);
 	struct unicast_packet *unicast_packet;
 	int hdr_size = sizeof(*unicast_packet);
 
-	if (check_unicast_packet(skb, hdr_size) < 0)
-		return NET_RX_DROP;
+	if (check_unicast_packet(skb, hdr_size) < 0) {
+		if (!is_my_mac(ethhdr->h_dest)) {
+			add_decoding_skb(recv_if, skb);
+			return NET_RX_SUCCESS;
+		} else {
+			return NET_RX_DROP;
+		}
+	}
 
 	if (!check_unicast_ttvn(bat_priv, skb))
 		return NET_RX_DROP;
@@ -1572,6 +1601,7 @@ int recv_unicast_packet(struct sk_buff *skb, struct hard_iface *recv_if)
 
 	/* packet for me */
 	if (is_my_mac(unicast_packet->dest)) {
+		stats_update(bat_priv, STAT_RECV);
 		interface_rx(recv_if->soft_iface, skb, recv_if, hdr_size);
 		return NET_RX_SUCCESS;
 	}
@@ -1741,4 +1771,45 @@ int recv_vis_packet(struct sk_buff *skb, struct hard_iface *recv_if)
 	/* We take a copy of the data in the packet, so we should
 	   always free the skbuf. */
 	return NET_RX_DROP;
+}
+
+int recv_coded_packet(struct sk_buff *skb, struct hard_iface *recv_if)
+{
+	struct coded_packet *coded_packet;
+	struct unicast_packet *unicast_packet;
+	struct ethhdr *ethhdr;
+	struct bat_priv *bat_priv = netdev_priv(recv_if->soft_iface);
+	int hdr_size = sizeof(struct coded_packet);
+	
+	/* Drop packet if coding is disabled */
+	if (!atomic_read(&bat_priv->catwoman))
+		return NET_RX_DROP;
+
+	/* keep skb linear */
+	if (skb_linearize(skb) < 0)
+		return NET_RX_DROP;
+
+	if (unlikely(!pskb_may_pull(skb, hdr_size)))
+		return NET_RX_DROP;
+
+	coded_packet = (struct coded_packet *)skb->data;
+	ethhdr = (struct ethhdr *)skb_mac_header(skb);
+
+	/* Verify frame is destined for us */
+	if (!is_my_mac(ethhdr->h_dest) && !is_my_mac(coded_packet->second_dest))
+		return NET_RX_DROP;
+
+	/* Try to decode packet */
+	unicast_packet = receive_coded_packet(bat_priv, skb, hdr_size);
+
+	if (!unicast_packet) {
+		stats_update(bat_priv, STAT_FAIL);
+		return NET_RX_DROP;
+	} else {
+		stats_update(bat_priv, STAT_DECODE);
+	}
+
+	/* Mark packet as decoded to avoid recoding when forwarding */
+	((struct bat_skb_cb *)skb->cb)->decoded = 1;
+	return recv_unicast_packet(skb, recv_if);
 }

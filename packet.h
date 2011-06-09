@@ -32,7 +32,8 @@ enum bat_packettype {
 	BAT_VIS          = 0x05,
 	BAT_UNICAST_FRAG = 0x06,
 	BAT_TT_QUERY     = 0x07,
-	BAT_ROAM_ADV     = 0x08
+	BAT_ROAM_ADV     = 0x08,
+	BAT_CODED	 = 0x09
 };
 
 /* this file is included by batctl which needs these defines */
@@ -130,6 +131,7 @@ struct unicast_packet {
 	uint8_t  ttl;
 	uint8_t  ttvn; /* destination translation table version number */
 	uint8_t  dest[6];
+	uint16_t decoding_id;
 } __packed;
 
 struct unicast_frag_packet {
@@ -142,6 +144,22 @@ struct unicast_frag_packet {
 	uint8_t  align;
 	uint8_t  orig[6];
 	uint16_t seqno;
+} __packed;
+
+struct coded_packet {
+	uint8_t  packet_type;
+	uint8_t  version;
+	uint16_t coded_len;
+	/* uint8_t  first_dest[6]; - saved in mac header destination */
+	uint8_t  first_source[6];
+	uint8_t  first_orig_dest[6];
+	uint16_t first_id;
+	uint8_t  first_ttl;
+	uint8_t  second_dest[6];
+	uint8_t  second_source[6];
+	uint8_t  second_orig_dest[6];
+	uint16_t second_id;
+	uint8_t  second_ttl;
 } __packed;
 
 struct bcast_packet {

@@ -107,6 +107,10 @@ struct orig_node {
 	spinlock_t tt_list_lock; /* protects tt_list */
 	atomic_t bond_candidates;
 	struct list_head bond_list;
+	struct list_head in_coding_list;
+	struct list_head out_coding_list;
+	spinlock_t in_coding_list_lock;
+	spinlock_t out_coding_list_lock;
 };
 
 struct gw_node {
@@ -139,6 +143,65 @@ struct neigh_node {
 	spinlock_t tq_lock;	/* protects: tq_recv, tq_index */
 };
 
+/**
+ *	coding_node
+ */
+struct coding_node {
+	struct list_head list;
+	uint8_t addr[ETH_ALEN];
+	atomic_t refcount;
+	struct rcu_head rcu;
+	struct orig_node *orig_node;
+	uint8_t topology;
+};
+
+struct coding_path {
+	struct hlist_node hash_entry;
+	struct rcu_head rcu;
+	struct list_head packet_list;
+	atomic_t refcount;
+	spinlock_t packet_list_lock;
+	uint8_t next_hop[6];
+	uint8_t prev_hop[6];
+};
+
+struct coding_packet {
+	/* Used when coding and decoding packets */
+	struct list_head list;
+	struct rcu_head rcu;
+	atomic_t refcount;
+	uint16_t id;
+	unsigned long timestamp;
+	struct neigh_node *neigh_node;
+	struct sk_buff *skb;
+	struct coding_path *coding_path;
+};
+
+struct bat_skb_cb {
+	uint8_t decoded;
+};
+
+struct catwoman_stats {
+	seqlock_t lock;			/* seqlock for fast write operation */
+	struct timespec timestamp;	/* Timestamp of data */
+
+	/* Generic node stats */
+	atomic_t transmitted;		/* Packets transmitted */
+	atomic_t received;		/* Packets received */
+
+	/* Relay node stats */
+	atomic_t forwarded;		/* Packets forwarded */
+	atomic_t coded;			/* Packets coded */
+	atomic_t dropped;		/* Packets dropped */
+	atomic_t coded_ab;		/* Packets coded to ab */
+	atomic_t coded_x;		/* Packets coded to x */
+	atomic_t coded_first;		/* Random MAC dest, coded packet first */
+	atomic_t neigh_first;		/* Random MAC dest, neighbor first */
+
+	/* End node stats */
+	atomic_t decoded;		/* Packets decoded */
+	atomic_t failed;		/* Packets that failed to be decoded */
+};
 
 struct bat_priv {
 	atomic_t mesh_state;
@@ -146,6 +209,10 @@ struct bat_priv {
 	atomic_t aggregated_ogms;	/* boolean */
 	atomic_t bonding;		/* boolean */
 	atomic_t fragmentation;		/* boolean */
+	atomic_t catwoman;		/* boolean */
+	atomic_t catwoman_promisc;	/* boolean */
+	atomic_t catwoman_hold;		/* uint */
+	atomic_t catwoman_purge;	/* uint */
 	atomic_t vis_mode;		/* VIS_TYPE_* */
 	atomic_t gw_mode;		/* GW_MODE_* */
 	atomic_t gw_sel_class;		/* uint */
@@ -203,6 +270,14 @@ struct bat_priv {
 	struct gw_node __rcu *curr_gw;  /* rcu protected pointer */
 	struct hard_iface __rcu *primary_if;  /* rcu protected pointer */
 	struct vis_info *my_vis_info;
+	struct hashtable_t *decoding_hash;
+	struct hashtable_t *coding_hash;
+	atomic_t coding_hash_count;
+	atomic_t decoding_hash_count;
+	struct delayed_work decoding_work;
+	struct delayed_work coding_work;
+	atomic_t last_decoding_id;
+	struct catwoman_stats catstat;
 };
 
 struct socket_client {

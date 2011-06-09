@@ -29,6 +29,7 @@
 #include "aggregation.h"
 #include "gateway_common.h"
 #include "originator.h"
+#include "decoding.h"
 
 static void send_outstanding_bcast_packet(struct work_struct *work);
 
@@ -59,6 +60,8 @@ int send_skb_packet(struct sk_buff *skb, struct hard_iface *hard_iface,
 		    const uint8_t *dst_addr)
 {
 	struct ethhdr *ethhdr;
+	struct sk_buff *skb_decoding;
+	struct bat_priv *bat_priv;
 
 	if (hard_iface->if_status != IF_ACTIVE)
 		goto send_skb_err;
@@ -88,6 +91,17 @@ int send_skb_packet(struct sk_buff *skb, struct hard_iface *hard_iface,
 	skb->protocol = __constant_htons(ETH_P_BATMAN);
 
 	skb->dev = hard_iface->net_dev;
+
+	/* Store packet for later network decoding */
+	bat_priv = netdev_priv(hard_iface->soft_iface);
+	if (atomic_read(&bat_priv->catwoman)) {
+		skb_decoding = skb_clone(skb, GFP_ATOMIC);
+
+		/* Adjust skb-data to point at batman-packet */
+		skb_pull_rcsum(skb_decoding, ETH_HLEN);
+
+		add_decoding_skb(hard_iface, skb_decoding);
+	}
 
 	/* dev_queue_xmit() returns a negative result on error.	 However on
 	 * congestion and traffic shaping, it drops and returns NET_XMIT_DROP

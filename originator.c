@@ -60,6 +60,20 @@ void neigh_node_free_ref(struct neigh_node *neigh_node)
 		kfree_rcu(neigh_node, rcu);
 }
 
+void coding_node_free_rcu(struct rcu_head *rcu)
+{
+	struct coding_node *coding_node;
+
+	coding_node = container_of(rcu, struct coding_node, rcu);
+	kfree(coding_node);
+}
+
+void coding_node_free_ref(struct coding_node *coding_node)
+{
+	if (atomic_dec_and_test(&coding_node->refcount))
+		call_rcu(&coding_node->rcu, coding_node_free_rcu);
+}
+
 /* increases the refcounter of a found router */
 struct neigh_node *orig_node_get_router(struct orig_node *orig_node)
 {
@@ -111,6 +125,7 @@ static void orig_node_free_rcu(struct rcu_head *rcu)
 {
 	struct hlist_node *node, *node_tmp;
 	struct neigh_node *neigh_node, *tmp_neigh_node;
+	struct coding_node *coding_node;
 	struct orig_node *orig_node;
 
 	orig_node = container_of(rcu, struct orig_node, rcu);
@@ -132,6 +147,28 @@ static void orig_node_free_rcu(struct rcu_head *rcu)
 	}
 
 	spin_unlock_bh(&orig_node->neigh_list_lock);
+
+	/* Remove in_coding_nodes */
+	rcu_read_lock();
+	spin_lock_bh(&orig_node->in_coding_list_lock);
+	list_for_each_entry_rcu(coding_node,
+				&orig_node->in_coding_list, list) {
+		list_del_rcu(&coding_node->list);
+		coding_node_free_ref(coding_node);
+	}
+	spin_unlock_bh(&orig_node->in_coding_list_lock);
+	rcu_read_unlock();
+
+	/* Remove out_coding_nodes */
+	rcu_read_lock();
+	spin_lock_bh(&orig_node->out_coding_list_lock);
+	list_for_each_entry_rcu(coding_node,
+				&orig_node->out_coding_list, list) {
+		list_del_rcu(&coding_node->list);
+		coding_node_free_ref(coding_node);
+	}
+	spin_unlock_bh(&orig_node->out_coding_list_lock);
+	rcu_read_unlock();
 
 	frag_list_free(&orig_node->frag_list);
 	tt_global_del_orig(orig_node->bat_priv, orig_node,
@@ -202,11 +239,15 @@ struct orig_node *get_orig_node(struct bat_priv *bat_priv, const uint8_t *addr)
 		return NULL;
 
 	INIT_HLIST_HEAD(&orig_node->neigh_list);
+	INIT_LIST_HEAD(&orig_node->in_coding_list);
+	INIT_LIST_HEAD(&orig_node->out_coding_list);
 	INIT_LIST_HEAD(&orig_node->bond_list);
 	spin_lock_init(&orig_node->ogm_cnt_lock);
 	spin_lock_init(&orig_node->bcast_seqno_lock);
 	spin_lock_init(&orig_node->neigh_list_lock);
 	spin_lock_init(&orig_node->tt_buff_lock);
+	spin_lock_init(&orig_node->in_coding_list_lock);
+	spin_lock_init(&orig_node->out_coding_list_lock);
 
 	/* extra reference for return */
 	atomic_set(&orig_node->refcount, 2);

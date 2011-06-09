@@ -43,9 +43,9 @@ void topology_stats_update(struct bat_priv *bat_priv,
 #define TOPOLOGY_AB 1
 #define TOPOLOGY_X 2
 
-static inline int choose_coding(void *data, int32_t size)
+static inline int choose_coding(const void *data, int32_t size)
 {
-	unsigned char *key = data;
+	unsigned const char *key = data;
 	uint32_t hash = 0;
 	size_t i;
 
@@ -62,7 +62,8 @@ static inline int choose_coding(void *data, int32_t size)
 	return hash % size;
 }
 
-static inline int compare_coding(struct hlist_node *node, void *data2)
+static inline int compare_coding(const struct hlist_node *node,
+				 const void *data2)
 {
 	struct coding_path *coding_path =
 		container_of(node, struct coding_path, hash_entry);

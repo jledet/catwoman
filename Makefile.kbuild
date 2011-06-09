@@ -51,3 +51,5 @@ batman-adv-y += translation-table.o
 batman-adv-y += unicast.o
 batman-adv-y += vis.o
 batman-adv-y += compat.o
+batman-adv-y += coding.o
+batman-adv-y += decoding.o

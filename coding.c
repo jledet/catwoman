@@ -252,25 +252,20 @@ void code_packets(struct bat_priv *bat_priv,
 	struct coded_packet *coded_packet;
 	uint8_t *first_source, *first_dest, *second_source, *second_dest;
 
-	/* If enabled, choose random mac-dest based on weighted link quality. 
-	 * Otherwise, always use weakest node */
+	/* Choose random mac-dest based on weighted link quality */
 	tq_avg_neigh = neigh_node->orig_node->router->tq_avg;
 	tq_avg_coding = coding_packet->neigh_node->orig_node->router->tq_avg;
-	if (atomic_read(&bat_priv->catwoman_random_tq)) {
-		rand_tq_neigh = random_scale_tq(tq_avg_neigh);
-		rand_tq_coding = random_scale_tq(tq_avg_coding);
-		printk(KERN_DEBUG "NTQ: %d NRTQ: %d CTQ: %d CRTQ: %d\n",
-				tq_avg_neigh, rand_tq_neigh,
-				tq_avg_coding, rand_tq_coding);
-		if (rand_tq_neigh >= rand_tq_coding) {
-			coding_packet_first = 1;
-			atomic_inc(&bat_priv->catstat.coded_first);
-		} else {
-			atomic_inc(&bat_priv->catstat.neigh_first);
-		}
+	
+	rand_tq_neigh = random_scale_tq(tq_avg_neigh);
+	rand_tq_coding = random_scale_tq(tq_avg_coding);
+	printk(KERN_DEBUG "NTQ: %d NRTQ: %d CTQ: %d CRTQ: %d\n",
+			tq_avg_neigh, rand_tq_neigh,
+			tq_avg_coding, rand_tq_coding);
+	if (rand_tq_neigh >= rand_tq_coding) {
+		coding_packet_first = 1;
+		atomic_inc(&bat_priv->catstat.coded_first);
 	} else {
-		if (tq_avg_neigh >= tq_avg_coding)
-			coding_packet_first = 1;
+		atomic_inc(&bat_priv->catstat.neigh_first);
 	}
 
 	/* Instead of zero padding the smallest data buffer, we
