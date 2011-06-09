@@ -30,6 +30,8 @@
 #include "gateway_common.h"
 #include "originator.h"
 #include "decoding.h"
+#include "compat.h"
+#include <linux/netfilter_bridge.h>
 
 static void send_outstanding_bcast_packet(struct work_struct *work);
 
@@ -105,9 +107,12 @@ int send_skb_packet(struct sk_buff *skb, struct hard_iface *hard_iface,
 
 	/* dev_queue_xmit() returns a negative result on error.	 However on
 	 * congestion and traffic shaping, it drops and returns NET_XMIT_DROP
-	 * (which is > 0). This will not be treated as an error. */
+	* (which is > 0). This will not be treated as an error.
+	* Also, if netfilter/ebtables wants to block outgoing batman
+	* packets then giving them a chance to do so here */ 
 
-	return dev_queue_xmit(skb);
+	return NF_HOOK(PF_BRIDGE, NF_BR_LOCAL_OUT, skb, NULL, skb->dev,
+			dev_queue_xmit); 
 send_skb_err:
 	kfree_skb(skb);
 	return NET_XMIT_DROP;

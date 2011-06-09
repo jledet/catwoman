@@ -30,6 +30,8 @@
 #include "hash.h"
 #include "coding.h"
 #include "decoding.h"
+#include "compat.h"
+#include <linux/netfilter_bridge.h>
 
 #include <linux/if_arp.h>
 
@@ -575,6 +577,11 @@ out:
 	return NOTIFY_DONE;
 }
 
+int batman_skb_recv_finish(struct sk_buff *skb)
+{
+	return NF_ACCEPT;
+}
+
 /* receive a packet with the batman ethertype coming on a hard
  * interface */
 static int batman_skb_recv(struct sk_buff *skb, struct net_device *dev,
@@ -591,6 +598,14 @@ static int batman_skb_recv(struct sk_buff *skb, struct net_device *dev,
 
 	/* skb was released by skb_share_check() */
 	if (!skb)
+		goto err_out;
+
+	
+	/* if netfilter/ebtables wants to block incoming batman
+	 * packets then give them a chance to do so here */
+	ret = NF_HOOK(PF_BRIDGE, NF_BR_LOCAL_IN, skb, dev, NULL,
+			batman_skb_recv_finish);
+	if (ret != 1)
 		goto err_out;
 
 	/* packet should hold at least type and version */
