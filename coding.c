@@ -12,7 +12,7 @@ static void forward_coding_packets(struct work_struct *work);
 
 static void start_coding_timer(struct bat_priv *bat_priv)
 {
-        unsigned long hold = atomic_read(&bat_priv->catwoman_hold);
+	unsigned long hold = atomic_read(&bat_priv->catwoman_hold);
 	INIT_DELAYED_WORK(&bat_priv->coding_work, forward_coding_packets);
 	queue_delayed_work(bat_event_workqueue, &bat_priv->coding_work,
 			(hold * HZ)/MSEC_PER_SEC);
@@ -21,6 +21,9 @@ static void start_coding_timer(struct bat_priv *bat_priv)
 /* Init coding hash table and kthread */
 int coding_init(struct bat_priv *bat_priv)
 {
+	if (bat_priv->coding_hash)
+		return 0;
+
 	atomic_set(&bat_priv->coding_hash_count, 0);
 	bat_priv->coding_hash = hash_new(1024);
 
@@ -188,7 +191,7 @@ static void _forward_coding_packets(struct bat_priv *bat_priv)
 	spinlock_t *packet_list_lock;
 	struct coding_packet *coding_packet;
 	struct coding_path *coding_path;
-	int i, count = 0;
+	int i;
 
 	if (!hash)
 		return;
@@ -204,16 +207,17 @@ static void _forward_coding_packets(struct bat_priv *bat_priv)
 
 			/* Loop packets */
 			spin_lock_bh(packet_list_lock);
-			list_for_each_entry_rcu(coding_packet, &coding_path->packet_list, list) {
+			list_for_each_entry_rcu(coding_packet,
+					&coding_path->packet_list, list) {
 				/* Packets are added to tail */
-				if (!coding_packet_timeout(bat_priv, coding_packet))
+				if (!coding_packet_timeout(bat_priv,
+							coding_packet))
 					break;
 
 				list_del_rcu(&coding_packet->list);
 				atomic_dec(&bat_priv->coding_hash_count);
 				stats_update(bat_priv, STAT_FORWARD);
 				coding_send_packet(coding_packet);
-                                count++;
 			}
 			spin_unlock_bh(packet_list_lock);
 		}
@@ -398,6 +402,7 @@ struct coding_packet *find_coding_packet(struct bat_priv *bat_priv,
 	}
 
 out:
+        printk(KERN_DEBUG "CW: Return coding packet");
 	rcu_read_unlock();
 	return coding_packet;
 }
@@ -411,7 +416,7 @@ int send_coded_packet(struct sk_buff *skb,
 		netdev_priv(neigh_node->if_incoming->soft_iface);
 	struct orig_node *orig_node = neigh_node->orig_node;
 	struct coding_node *coding_node;
-	struct coding_packet *coding_packet;
+	struct coding_packet *coding_packet = NULL;
 
 	/* for neighbor of orig_node */
 	rcu_read_lock();
@@ -419,6 +424,11 @@ int send_coded_packet(struct sk_buff *skb,
 			&orig_node->in_coding_list, list) {
 		if (compare_eth(coding_node->addr, ethhdr->h_source))
 			continue;
+
+                if (!bat_priv || !coding_node || !ethhdr) {
+                    printk(KERN_DEBUG "CW: NULL pointer: %p %p %p", bat_priv, coding_node, ethhdr);
+                    continue;
+                }
 
 		coding_packet =
 			find_coding_packet(bat_priv, coding_node, ethhdr);
