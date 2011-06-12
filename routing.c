@@ -1492,6 +1492,7 @@ int route_unicast_packet(struct sk_buff *skb, struct hard_iface *recv_if)
 
 	/* Code packet if possible */
 	if (atomic_read(&bat_priv->catwoman) && 
+			unicast_packet->packet_type == BAT_UNICAST &&
 			!((struct bat_skb_cb *)skb->cb)->decoded) {
 		add_coding_skb(skb, neigh_node, ethhdr);
 	} else {

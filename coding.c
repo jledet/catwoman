@@ -262,9 +262,6 @@ void code_packets(struct bat_priv *bat_priv,
 	
 	rand_tq_neigh = random_scale_tq(tq_avg_neigh);
 	rand_tq_coding = random_scale_tq(tq_avg_coding);
-	printk(KERN_DEBUG "NTQ: %d NRTQ: %d CTQ: %d CRTQ: %d\n",
-			tq_avg_neigh, rand_tq_neigh,
-			tq_avg_coding, rand_tq_coding);
 	if (rand_tq_neigh >= rand_tq_coding) {
 		coding_packet_first = 1;
 		atomic_inc(&bat_priv->catstat.coded_first);
@@ -281,11 +278,6 @@ void code_packets(struct bat_priv *bat_priv,
 		skb_dest = skb;
 		skb_src = coding_packet->skb;
 	}
-
-	/* The skb is also used for decoding, so copy before code */
-	/*skb_dest = skb_copy(skb_dest, GFP_ATOMIC);
-	if(!skb_dest)
-		return;*/
 
 	coding_len = skb_src->len - unicast_size;
 
@@ -305,11 +297,6 @@ void code_packets(struct bat_priv *bat_priv,
 		unicast_packet1 = (struct unicast_packet *)skb->data;
 		unicast_packet2 = (struct unicast_packet *)coding_packet->skb->data;
 	}
-
-	/*
-	printk(KERN_DEBUG "CW: Coding packets: %hu xor %hu\n",
-			unicast_packet1->decoding_id, unicast_packet2->decoding_id);
-	*/
 
 	if(skb_cow(skb_dest, header_add) < 0)
 		return;
@@ -402,7 +389,6 @@ struct coding_packet *find_coding_packet(struct bat_priv *bat_priv,
 	}
 
 out:
-        printk(KERN_DEBUG "CW: Return coding packet");
 	rcu_read_unlock();
 	return coding_packet;
 }
