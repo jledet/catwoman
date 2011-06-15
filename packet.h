@@ -66,10 +66,16 @@ enum unicast_frag_flags {
 	UNI_FRAG_LARGETAIL = 1 << 1
 };
 
+/* TT_QUERY subtypes */
+#define TT_QUERY_TYPE_MASK 0x3
+
+enum tt_query_packettype {
+	TT_REQUEST    = 0,
+	TT_RESPONSE   = 1
+};
+
 /* TT_QUERY flags */
 enum tt_query_flags {
-	TT_RESPONSE   = 1 << 0,
-	TT_REQUEST    = 1 << 1,
 	TT_FULL_TABLE = 1 << 2
 };
 
@@ -220,6 +226,6 @@ struct roam_adv_packet {
 struct tt_change {
 	uint8_t flags;
 	uint8_t addr[ETH_ALEN];
-};
+} __packed;
 
 #endif /* _NET_BATMAN_ADV_PACKET_H_ */

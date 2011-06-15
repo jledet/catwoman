@@ -120,6 +120,7 @@ int mesh_init(struct net_device *soft_iface)
 	if (coding_init(bat_priv) < 0)
 		goto err;
 
+	atomic_set(&bat_priv->gw_reselect, 0);
 	atomic_set(&bat_priv->mesh_state, MESH_ACTIVE);
 	goto end;
 

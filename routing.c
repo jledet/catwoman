@@ -730,7 +730,8 @@ void receive_bat_packet(const struct ethhdr *ethhdr,
 
 			spin_lock_bh(&orig_neigh_node->ogm_cnt_lock);
 			word = &(orig_neigh_node->bcast_own[offset]);
-			bit_mark(word, if_incoming_seqno - batman_packet->seqno - 2);
+			bit_mark(word,
+				 if_incoming_seqno - batman_packet->seqno - 2);
 			orig_neigh_node->bcast_own_sum[if_incoming->if_num] =
 				bit_packet_count(word);
 			spin_unlock_bh(&orig_neigh_node->ogm_cnt_lock);
@@ -1231,7 +1232,8 @@ int recv_tt_query(struct sk_buff *skb, struct hard_iface *recv_if)
 
 	tt_query->tt_data = ntohs(tt_query->tt_data);
 
-	if (tt_query->flags & TT_REQUEST) {
+	switch (tt_query->flags & TT_QUERY_TYPE_MASK) {
+	case TT_REQUEST:
 		/* If we cannot provide an answer the tt_request is
 		 * forwarded */
 		if (!send_tt_response(bat_priv, tt_query)) {
@@ -1242,22 +1244,23 @@ int recv_tt_query(struct sk_buff *skb, struct hard_iface *recv_if)
 			tt_query->tt_data = htons(tt_query->tt_data);
 			return route_unicast_packet(skb, recv_if);
 		}
-		ret = NET_RX_SUCCESS;
-		goto out;
-	}
-	/* packet needs to be linearised to access the TT changes records */
-	if (skb_linearize(skb) < 0)
-		goto out;
+		break;
+	case TT_RESPONSE:
+		/* packet needs to be linearised to access the TT changes records */
+		if (skb_linearize(skb) < 0)
+			goto out;
 
-	if (is_my_mac(tt_query->dst))
-		handle_tt_response(bat_priv, tt_query);
-	else {
-		bat_dbg(DBG_TT, bat_priv,
-			"Routing TT_RESPONSE to %pM [%c]\n",
-			tt_query->dst,
-			(tt_query->flags & TT_FULL_TABLE ? 'F' : '.'));
-		tt_query->tt_data = htons(tt_query->tt_data);
-		return route_unicast_packet(skb, recv_if);
+		if (is_my_mac(tt_query->dst))
+			handle_tt_response(bat_priv, tt_query);
+		else {
+			bat_dbg(DBG_TT, bat_priv,
+				"Routing TT_RESPONSE to %pM [%c]\n",
+				tt_query->dst,
+				(tt_query->flags & TT_FULL_TABLE ? 'F' : '.'));
+			tt_query->tt_data = htons(tt_query->tt_data);
+			return route_unicast_packet(skb, recv_if);
+		}
+		break;
 	}
 	ret = NET_RX_SUCCESS;
 
